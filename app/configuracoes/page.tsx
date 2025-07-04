@@ -117,19 +117,12 @@ export default function ConfiguracoesPage() {
       <header className="bg-white border-b border-gray-200">
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center justify-between">
               <Link href="/dashboard">
                 <Button variant="ghost" size="sm">
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   <span className="hidden sm:inline">Voltar ao painel</span>
                   <span className="sm:hidden">Voltar</span>
-                </Button>
-              </Link>
-              <Link href="/#planos">
-                <Button variant="ghost" size="sm">
-                  <Star className="h-4 w-4 mr-2" />
-                  <span className="hidden sm:inline">Ver planos</span>
-                  <span className="sm:hidden">Planos</span>
                 </Button>
               </Link>
               <div className="flex items-center space-x-2">

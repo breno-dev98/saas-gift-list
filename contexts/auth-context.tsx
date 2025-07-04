@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { api } from "@/lib/api/axios";
 
 interface User {
   id: string;
@@ -10,6 +11,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
+  loading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   register: (name: string, email: string, password: string) => Promise<boolean>;
   logout: () => void;
@@ -28,72 +30,68 @@ export function useAuth() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem("token");
-    if (!savedToken) return;
+    const token = localStorage.getItem("token");
+    const localUser = localStorage.getItem("user");
 
-    fetch("/api/auth/me", {
-      headers: { Authorization: `Bearer ${savedToken}` },
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          logout();
-          return null;
-        }
-        const data = await res.json();
-        return data;
-      })
-      .then((data) => {
-        if (data && data.user) setUser(data.user);
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
+    if (localUser) {
+      try {
+        setUser(JSON.parse(localUser));
+      } catch {
+        // em caso de erro ao fazer parse, limpa tudo
+        logout();
+      }
+    }
+
+    // Verifica com a API se o token ainda é válido
+    api
+      .get("/auth/me")
+      .then((res) => {
+        setUser(res.data.user);
       })
       .catch(() => {
-        logout();
+        logout(); // token expirado ou inválido
+      })
+      .finally(() => {
+        setLoading(false);
       });
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
+      const res = await api.post("/auth/login", { email, password });
 
-      if (!res.ok) return false;
+      const { user, token } = res.data;
 
-      const data = await res.json();
-
-      setUser(data.user);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      localStorage.setItem("token", data.token);
+      setUser(user);
+      localStorage.setItem("user", JSON.stringify(user));
+      localStorage.setItem("token", token);
 
       return true;
-    } catch (err) {
-      console.error("Erro no login:", err);
+    } catch {
       return false;
     }
   };
 
   const register = async (name: string, email: string, password: string): Promise<boolean> => {
     try {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
-      });
+      const res = await api.post("/auth/register", { name, email, password });
 
-      if (!res.ok) return false;
+      const { user, token } = res.data;
 
-      const data = await res.json();
-
-      setUser(data.user);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      localStorage.setItem("token", data.token);
+      setUser(user);
+      localStorage.setItem("user", JSON.stringify(user));
+      localStorage.setItem("token", token);
 
       return true;
-    } catch (err) {
-      console.error("Erro no cadastro:", err);
+    } catch {
       return false;
     }
   };
@@ -102,7 +100,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     localStorage.removeItem("user");
     localStorage.removeItem("token");
-    localStorage.removeItem("lists");
   };
 
   const updateUser = (userData: Partial<User>) => {
@@ -113,5 +110,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  return <AuthContext.Provider value={{ user, login, register, logout, updateUser }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser }}>{children}</AuthContext.Provider>;
 }

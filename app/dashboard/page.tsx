@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { occasionLabels, occasionOptions } from "@/utils/occasions";
 import {
   Dialog,
   DialogContent,
@@ -34,12 +35,12 @@ import { Gift, Plus, Share2, Eye, Settings, LogOut, Trash2, Edit, Star } from "l
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
+import { api } from "@/lib/api/axios"
 
 export default function DashboardPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, loading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(true);
   const [lists, setLists] = useState<GiftList[]>([]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newListData, setNewListData] = useState({
@@ -47,41 +48,49 @@ export default function DashboardPage() {
     occasion: "",
     description: "",
   });
+  
 
   // Estados para AlertDialog
   const [alertDialogOpen, setAlertDialogOpen] = useState(false);
   const [listToDelete, setListToDelete] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
-    if (!user) {
+    if (!loading && !user) {
       router.push("/auth");
       return;
     }
 
-    setLoading(false);
+    if (!loading && user) {
+      const fetchLists = async () => {
+        try {
+          const res = await api.get("/listas");
+          const data = await res.data;
 
-    const fetchLists = async () => {
-      try {
-        const res = await fetch("/api/listas");
-        const data = await res.json();
+          // Agora é seguro acessar user.id
+          const userLists = data.filter((list: GiftList) => list.userId === user.id);
+          setLists(userLists);
+        } catch (err) {
+          console.error("Erro ao buscar listas:", err);
+          toast({ title: "Erro", description: "Erro ao carregar listas.", variant: "destructive" });
+        }
+      };
+      fetchLists();
+    }
 
-        // Agora é seguro acessar user.id
-        const userLists = data.filter((list: GiftList) => list.userId === user.id);
-        setLists(userLists);
-      } catch (err) {
-        console.error("Erro ao buscar listas:", err);
-        toast({ title: "Erro", description: "Erro ao carregar listas.", variant: "destructive" });
-      }
-    };
+  }, [user, loading]);
 
-    fetchLists();
-  }, [user]);
-
-  if (loading) return null; // ou um spinner, skeleton, etc.
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-gray-500">Carregando...</p>
+      </div>
+    );
+  }
 
   if (!user) {
     return null;
   }
+  
 
   const userLists = lists.filter((list) => list.userId === user.id);
 
@@ -98,19 +107,13 @@ export default function DashboardPage() {
     }
 
     try {
-      const res = await fetch("/api/listas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...newListData,
-          items: [],
-          userId: user.id,
-        }),
+      const response = await api.post("/listas", {
+        ...newListData,
+        items: [],
+        userId: user.id,
       });
 
-      if (!res.ok) throw new Error("Falha ao criar lista");
-
-      const newList: GiftList = await res.json();
+      const newList: GiftList = response.data;
 
       toast({
         title: "Lista criada com sucesso!",
@@ -121,11 +124,16 @@ export default function DashboardPage() {
       setNewListData({ name: "", occasion: "", description: "" });
       setLists((prev) => [...prev, newList]);
       router.push(`/dashboard/lista/${newList.id}`);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast({ title: "Erro", description: "Erro ao criar lista.", variant: "destructive" });
+      toast({
+        title: "Erro",
+        description: err?.response?.data?.error || "Erro ao criar lista.",
+        variant: "destructive",
+      });
     }
   };
+
 
   // Abre o AlertDialog para confirmar exclusão
   const openDeleteDialog = (id: string, name: string) => {
@@ -138,13 +146,7 @@ export default function DashboardPage() {
     if (!listToDelete) return;
 
     try {
-      const res = await fetch(`/api/listas/${listToDelete.id}`, {
-        method: "DELETE",
-      });
-
-      if (!res.ok) {
-        throw new Error("Erro ao deletar lista");
-      }
+      await api.delete(`/listas/${listToDelete.id}`);
 
       setLists((prev) => prev.filter((list) => list.id !== listToDelete.id));
       toast({
@@ -186,11 +188,10 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <Link href="/" className="flex items-center space-x-2">
               <Gift className="h-6 w-6 sm:h-8 sm:w-8 text-pink-600" />
-              <span className="text-sm sm:text-md md:text-xl lg:text-2xl w-8 md:w-fit font-bold text-gray-900">Meus Presentes</span>
+              <span className="text-md sm:text-lg md:text-xl lg:text-2xl font-bold text-gray-900">Meus Presentes</span>
             </Link>
             <div className="flex items-center space-x-2 sm:space-x-4">
-              <span className="text-gray-600 text-sm sm:text-base hidden md:flex">Olá, {user.name}!</span>
-              <span className="text-gray-600 md:hidden">Olá {user?.name}!</span>
+              <span className="text-gray-600 text-sm sm:text-base hidden md:flex">Olá, {user?.name}!</span>
               <div className="hidden sm:flex items-center space-x-2">
                 <Link href="/#planos">
                   <Button variant="ghost" size="sm">
@@ -210,6 +211,11 @@ export default function DashboardPage() {
                 </Button>
               </div>
               <div className="sm:hidden">
+                <Link href="/configuracoes">
+                  <Button variant="ghost">
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </Link>
                 <Button variant="ghost" size="sm" onClick={handleLogout}>
                   <LogOut className="h-4 w-4" />
                 </Button>
@@ -258,12 +264,11 @@ export default function DashboardPage() {
                       <SelectValue placeholder="Selecione a ocasião" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="CASAMENTO">Casamento</SelectItem>
-                      <SelectItem value="ANIVERSARIO">Aniversário</SelectItem>
-                      <SelectItem value="CHA_DE_CASA_NOVA">Chá de Casa Nova</SelectItem>
-                      <SelectItem value="CHA_DE_BEBE">Chá de Bebê</SelectItem>
-                      <SelectItem value="FORMATURA">Formatura</SelectItem>
-                      <SelectItem value="OUTRA">Outra</SelectItem>
+                      {occasionOptions.map(({ value, label }) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -309,7 +314,7 @@ export default function DashboardPage() {
                 <CardHeader>
                   <CardTitle className="text-lg">{list.name}</CardTitle>
                   <CardDescription>
-                    {list.occasion.charAt(0).toUpperCase() + list.occasion.slice(1).replace("-", " ")} • {list.items.length} itens
+                    {occasionLabels[list.occasion] || "Ocasião desconhecida"} • {list.items.length} itens
                   </CardDescription>
                 </CardHeader>
                 <CardContent>

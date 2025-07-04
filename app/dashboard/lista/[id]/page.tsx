@@ -8,7 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,11 +27,23 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, Share2, Eye, Trash2, Edit, ExternalLink, Gift, ShoppingBag } from "lucide-react";
+import {
+  ArrowLeft,
+  Plus,
+  Share2,
+  Eye,
+  Trash2,
+  Edit,
+  ExternalLink,
+  Gift,
+  ShoppingBag,
+} from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import Image from "next/image";
+import { api } from "@/lib/api/axios";
+import { occasionLabels, OccasionValue } from "@/utils/occasions";
 
 interface ListItem {
   id: string;
@@ -46,36 +65,12 @@ interface GiftList {
 }
 
 const popularStores = [
-  {
-    name: "Amazon",
-    url: "https://amazon.com.br",
-    logo: "https://logodownload.org/wp-content/uploads/2020/12/amazon-com-br-logo-0.png",
-  },
-  {
-    name: "Mercado Livre",
-    url: "https://mercadolivre.com.br",
-    logo: "https://upload.wikimedia.org/wikipedia/pt/thumb/0/04/Logotipo_MercadoLivre.png/250px-Logotipo_MercadoLivre.png",
-  },
-  {
-    name: "Shopee",
-    url: "https://shopee.com.br",
-    logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Shopee.svg/120px-Shopee.svg.png",
-  },
-  {
-    name: "Magazine Luiza",
-    url: "https://magazineluiza.com.br",
-    logo: "https://logodownload.org/wp-content/uploads/2014/06/magalu-logo-0.png",
-  },
-  {
-    name: "Americanas",
-    url: "https://americanas.com.br",
-    logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Americanas.com_logo.svg/120px-Americanas.com_logo.svg.png",
-  },
-  {
-    name: "Casas Bahia",
-    url: "https://casasbahia.com.br",
-    logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Casas_Bahia_logo_2020.svg/250px-Casas_Bahia_logo_2020.svg.png",
-  },
+  { name: "Amazon", url: "https://amazon.com.br", logo: "https://logodownload.org/wp-content/uploads/2020/12/amazon-com-br-logo-0.png" },
+  { name: "Mercado Livre", url: "https://mercadolivre.com.br", logo: "https://upload.wikimedia.org/wikipedia/pt/thumb/0/04/Logotipo_MercadoLivre.png/250px-Logotipo_MercadoLivre.png" },
+  { name: "Shopee", url: "https://shopee.com.br", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Shopee.svg/120px-Shopee.svg.png" },
+  { name: "Magazine Luiza", url: "https://magazineluiza.com.br", logo: "https://logodownload.org/wp-content/uploads/2014/06/magalu-logo-0.png" },
+  { name: "Americanas", url: "https://americanas.com.br", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Americanas.com_logo.svg/120px-Americanas.com_logo.svg.png" },
+  { name: "Casas Bahia", url: "https://casasbahia.com.br", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Casas_Bahia_logo_2020.svg/250px-Casas_Bahia_logo_2020.svg.png" },
 ];
 
 export default function EditListPage() {
@@ -85,82 +80,79 @@ export default function EditListPage() {
   const { toast } = useToast();
   const listId = params.id as string;
 
+  const [isLoadingItems, setIsLoadingItems] = useState(true);
   const [list, setList] = useState<GiftList | null>(null);
   const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ListItem | null>(null);
   const [newItemData, setNewItemData] = useState({ name: "", link: "", price: "", image: "" });
-
-  // Novos estados para AlertDialog de exclusão
   const [isAlertDialogOpen, setIsAlertDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<ListItem | null>(null);
 
-  if (!user?.id) {
-    toast({ title: "Erro", description: "Usuário não autenticado." });
-    return;
-  }
-  
-  const fetchList = async () => {
-    try {
-      const res = await fetch(`/api/listas/${listId}`);
-      if (!res.ok) throw new Error("Erro ao buscar lista");
-      const data = await res.json();
-      setList(data);
-    } catch (error) {
-      console.error(error);
-      router.push("/dashboard");
+  useEffect(() => {
+    if (!user?.id) {
+      toast({ title: "Erro", description: "Usuário não autenticado." });
+      router.push("/auth");
     }
-  };
-
-  // Add Item
-  const addItemToList = async (item: Partial<ListItem>) => {
-    const res = await fetch(`/api/listas/${listId}/itens`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(item),
-    });
-    if (!res.ok) throw new Error("Erro ao adicionar item");
-    fetchList();
-  };
-
-  // Update Item
-  const updateListItem = async (itemId: string, item: Partial<ListItem>) => {
-    const res = await fetch(`/api/listas/${listId}/itens/${itemId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(item),
-    });
-    if (!res.ok) throw new Error("Erro ao atualizar item");
-    fetchList();
-  };
-
-  // Delete Item
-  const deleteListItem = async (itemId: string) => {
-    const res = await fetch(`/api/listas/${listId}/itens/${itemId}`, {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-        "x-user-id": user?.id
-      },
-    });
-    if (!res.ok) throw new Error("Erro ao deletar item");
-    fetchList();
-  };
+  }, [user, toast, router]);
 
   useEffect(() => {
-    if (!user) {
-      router.push("/auth");
-      return;
-    }
-    fetchList();
-  }, [user]);
+    const fetchList = async () => {
+      try {
+        const res = await api.get(`/listas/${listId}`);
+        setList(res.data);
+      } catch (error) {
+        console.error(error);
+        toast({ title: "Erro", description: "Erro ao carregar lista.", variant: "destructive" });
+        router.push("/dashboard");
+      } finally {
+        setIsLoadingItems(false);
+      }
+    };
+
+    if (user?.id) fetchList();
+  }, [user?.id, listId, toast, router]);
 
   useEffect(() => {
     if (list && list.userId !== user?.id) {
       router.push("/dashboard");
     }
-  }, [list, user]);
+  }, [list, user?.id, router]);
 
-  if (!user || !list) return null;
+  const fetchList = async () => {
+    const res = await api.get(`/listas/${listId}`);
+    setList(res.data);
+  };
+
+  const addItemToList = async (item: Partial<ListItem>) => {
+    await api.post(`/listas/${listId}/itens`, item);
+    fetchList();
+  };
+
+  const updateListItem = async (itemId: string, item: Partial<ListItem>) => {
+    await api.put(`/listas/${listId}/itens/${itemId}`, item);
+    fetchList();
+  };
+
+  const deleteListItem = async (itemId: string) => {
+    await api.delete(`/listas/${listId}/itens/${itemId}`, {
+      headers: { "x-user-id": user?.id || "" },
+    });
+    fetchList();
+  };
+
+  const openEditDialog = (item: ListItem) => {
+    setEditingItem(item);
+    setNewItemData({ name: item.name, link: item.link, price: item.price, image: item.image || "" });
+  };
+
+  const closeEditDialog = () => {
+    setEditingItem(null);
+    setNewItemData({ name: "", link: "", price: "", image: "" });
+  };
+
+  const resetForm = () => {
+    setNewItemData({ name: "", link: "", price: "", image: "" });
+  };
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -171,7 +163,7 @@ export default function EditListPage() {
     await addItemToList({ ...newItemData, purchased: false });
     toast({ title: "Item adicionado!", description: "O item foi adicionado à sua lista." });
     setIsAddItemDialogOpen(false);
-    setNewItemData({ name: "", link: "", price: "", image: "" });
+    resetForm();
   };
 
   const handleEditItem = async (e: React.FormEvent) => {
@@ -182,20 +174,16 @@ export default function EditListPage() {
     }
     await updateListItem(editingItem.id, newItemData);
     toast({ title: "Item atualizado!", description: "As alterações foram salvas." });
-    setEditingItem(null);
-    setNewItemData({ name: "", link: "", price: "", image: "" });
+    closeEditDialog();
   };
 
-  // Abre o AlertDialog para confirmação da exclusão do item
   const openDeleteDialog = (item: ListItem) => {
     setItemToDelete(item);
     setIsAlertDialogOpen(true);
   };
 
-  // Confirma a exclusão do item após o alerta
   const confirmDeleteItem = async () => {
     if (!itemToDelete) return;
-
     try {
       await deleteListItem(itemToDelete.id);
       toast({ title: "Item excluído", description: "O item foi removido da lista." });
@@ -214,19 +202,13 @@ export default function EditListPage() {
     toast({ title: "Link copiado!", description: "O link da lista foi copiado para a área de transferência." });
   };
 
-  const openEditDialog = (item: ListItem) => {
-    setEditingItem(item);
-    setNewItemData({ name: item.name, link: item.link, price: item.price, image: item.image || "" });
-  };
+  if (!user || isLoadingItems) {
+    return <div className="text-center py-12 text-gray-500">Carregando itens...</div>;
+  }
 
-  const closeEditDialog = () => {
-    setEditingItem(null);
-    setNewItemData({ name: "", link: "", price: "", image: "" });
-  };
-
-  const resetForm = () => {
-    setNewItemData({ name: "", link: "", price: "", image: "" });
-  };
+  if (!list) {
+    return <div className="text-center py-12 text-red-600">Lista não encontrada.</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-50">
@@ -234,7 +216,7 @@ export default function EditListPage() {
       <header className="bg-white border-b border-gray-200">
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center justify-between">
               <Link href="/dashboard">
                 <Button variant="ghost" size="sm">
                   <ArrowLeft className="h-4 w-4 mr-2" />
@@ -243,21 +225,21 @@ export default function EditListPage() {
               </Link>
               <div className="flex items-center space-x-2">
                 <Gift className="h-5 w-5 sm:h-6 sm:w-6 text-pink-600" />
-                <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate">{list.name}</h1>
+                <h1 className="text-lg sm:text-xl w-fit font-bold text-gray-900">Meus Presentes</h1>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center justify-evenly gap-2">
               <Link href={`/lista/${listId}`} target="_blank">
                 <Button variant="outline" size="sm" className="text-xs sm:text-sm bg-transparent">
                   <Eye className="h-4 w-4 mr-1 sm:mr-2" />
                   <span className="hidden sm:inline">Visualizar</span>
-                  <span className="sm:hidden">Ver</span>
+                  <span className="sm:hidden">Visualizar</span>
                 </Button>
               </Link>
               <Button variant="outline" size="sm" onClick={handleShareList} className="text-xs sm:text-sm bg-transparent">
                 <Share2 className="h-4 w-4 mr-1 sm:mr-2" />
                 <span className="hidden sm:inline">Compartilhar</span>
-                <span className="sm:hidden">Share</span>
+                <span className="sm:hidden">Compartilhar</span>
               </Button>
             </div>
           </div>
@@ -270,7 +252,7 @@ export default function EditListPage() {
           <CardHeader>
             <CardTitle>{list.name}</CardTitle>
             <CardDescription>
-              {list.occasion.charAt(0).toUpperCase() + list.occasion.slice(1).replace("-", " ")} • {list.items.length} itens
+              {list.occasion in occasionLabels ? occasionLabels[list.occasion as OccasionValue] : "Ocasião desconhecida"} • {list.items.length} itens
             </CardDescription>
             {list.description && <p className="text-gray-600">{list.description}</p>}
           </CardHeader>
@@ -401,7 +383,13 @@ export default function EditListPage() {
         </div>
 
         {/* Items List */}
-        {list.items.length === 0 ? (
+
+        {isLoadingItems ? (
+          <div className="text-center py-12">
+            {/* Spinner ou Skeleton opcional */}
+            <p className="text-gray-500">Carregando itens...</p>
+          </div>
+        ) : list.items.length === 0 ? (
           <Card className="text-center py-12">
             <CardContent>
               <Gift className="h-16 w-16 text-gray-400 mx-auto mb-4" />

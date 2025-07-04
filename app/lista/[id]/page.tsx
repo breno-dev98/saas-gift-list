@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import Image from "next/image";
 import Link from "next/link";
+import { api } from "@/lib/api/axios";
 
 export default function PublicListPage() {
   const { user } = useAuth();
@@ -49,13 +50,8 @@ export default function PublicListPage() {
 
   const fetchList = async () => {
     try {
-      const res = await fetch(`/api/listas/${listId}`);
-      if (!res.ok) {
-        setList(null);
-        return;
-      }
-      const data = await res.json();
-      setList(data);
+      const res = await api.get(`/listas/${listId}`);
+      setList(res.data);
     } catch (error) {
       console.error("Erro ao buscar lista:", error);
       setList(null);
@@ -64,11 +60,7 @@ export default function PublicListPage() {
 
   const reserveItem = async (listId: string, itemId: string, reservedBy: string) => {
     try {
-      await fetch(`/api/listas/${listId}/itens/${itemId}/reservar`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reservedBy }),
-      });
+      await api.put(`/listas/${listId}/itens/${itemId}/reservar`, { reservedBy });
       fetchList();
     } catch (error) {
       console.error("Erro ao reservar item:", error);
@@ -77,9 +69,7 @@ export default function PublicListPage() {
 
   const unreserveItem = async (listId: string, itemId: string) => {
     try {
-      await fetch(`/api/listas/${listId}/itens/${itemId}/cancelar-reserva`, {
-        method: "PUT",
-      });
+      await api.put(`/listas/${listId}/itens/${itemId}/cancelar-reserva`);
       fetchList();
     } catch (error) {
       console.error("Erro ao cancelar reserva:", error);
@@ -200,10 +190,9 @@ export default function PublicListPage() {
                 <span className="sm:hidden">Fechar</span>
               </Button>
             )}
-            <Button variant="outline" size="sm" onClick={handleShare} className="text-xs sm:text-sm bg-transparent">
+            <Button title="Compartilhar" variant="outline" size="sm" onClick={handleShare} className="text-xs sm:text-sm bg-transparent">
               <Share2 className="h-4 w-4 mr-1 sm:mr-2" />
               <span className="hidden sm:inline">Compartilhar</span>
-              <span className="sm:hidden">Share</span>
             </Button>
           </div>
         </div>
@@ -378,8 +367,8 @@ export default function PublicListPage() {
           <p className="text-gray-600 mb-6 max-w-md mx-auto text-sm sm:text-base px-4">
             Crie sua própria lista de presentes personalizada e compartilhe com seus convidados!
           </p>
-          <Link href="/auth">
-            <Button className="bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 text-white px-6 sm:px-8 py-2 sm:py-3 text-sm sm:text-base w-full sm:w-auto mx-4 sm:mx-0">
+          <Link href="/auth" className="block w-full sm:inline-block sm:w-auto max-w-sm mx-auto px-3">
+            <Button className="bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 text-white px-6 sm:px-8 py-2 sm:py-3 text-sm sm:text-base w-full">
               <Gift className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
               Criar minha lista grátis
             </Button>
